@@ -1,0 +1,661 @@
+---
+title: "Analysis on Traffic Crashes in Chicagp"
+author: "Raghul Sekar, Raj Deelip Sounder Raj, Mohammad Rafi Shaik"
+date: "10/30/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning=FALSE,message=FALSE)
+```
+
+
+```{r echo=FALSE, message=FALSE}
+# Calling all libraries
+library(tidyr)
+library(dplyr)  
+library(magrittr)
+library(tidyr)
+library(stringr)
+library(lubridate)
+library(stringr)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+
+
+```
+
+
+# Datasets:
+
+## Crashes Dataset:
+Crash data shows information about each traffic crash on city streets within the City of Chicago limits and under the jurisdiction of Chicago Police Department (CPD)
+
+## People Dataset:
+This data contains information about people involved in a crash and if any injuries were sustained.
+
+## Vehicle Dataset:
+This dataset contains information about vehicles (or units as they are identified in crash reports) involved in a traffic crash.
+
+
+
+
+
+
+```{r message=FALSE}
+#Reading Crashes Dataset and storing in df_crashes
+df_crashes <- read.csv('C:/Users/raghu/Downloads/Traffic_Crashes_-_Crashes.csv',na.strings = "")
+
+#Reading Vechile Dataset and storing in df_vechicles
+df_vehicles <- read.csv('C:/Users/raghu/Downloads/Traffic_Crashes_-_Vehicles.csv',na.strings = "")
+
+#Reading People Dataset and storing in df_people
+df_people <- read.csv('C:/Users/raghu/Downloads/Traffic_Crashes_-_People.csv',na.strings = "")
+
+
+
+```
+```{r}
+#Filling empty values as Null
+df_crashes[df_crashes=='']<-NA
+df_vehicles[df_vehicles=='']<-NA
+df_people[df_people=='']<-NA
+
+
+```
+# Cleaning the data in Crashes Dataset
+There are exactly 1131 null values in multiple columns. Upon checking further, they are all in same rows. So deleted the rows.
+```{r}
+#There are exactly 1131 null values in multiple columns. Upon checking further, they are all in same rows. So deleted the rows.
+
+df_crashes <- df_crashes[- which(is.na(df_crashes$INJURIES_UNKNOWN)),]
+
+```
+
+Checked null value percentage in other columns and deleted the columns with more than 80% null values.
+```{r}
+#checking null value percentage in other columns and deleting the columns with more than 80% null values.
+
+null_value_data <- sapply(df_crashes, function(x) sum(is.na(x)))
+null_value_data <- round(null_value_data/nrow(df_crashes)*100,2)
+
+drop_data <- names(null_value_data[null_value_data > 80])
+df_crashes <- df_crashes[,!(names(df_crashes) %in% drop_data   )]
+                    
+```
+
+# Cleaning the data in Vehicles Dataset
+Deleted columns with null values greater than 80%
+```{r}
+
+#Now cleaning df_vehicles
+#Deleting columns with null values greater than 80%
+
+null_value_data <- sapply(df_vehicles, function(x) sum(is.na(x)))
+null_value_data <- round(null_value_data/nrow(df_crashes)*100,2)
+
+drop_data <- names(null_value_data[null_value_data > 80])
+df_vehicles <- df_vehicles[,!(names(df_vehicles) %in% drop_data   )]
+
+```
+
+# Cleaning the data in People Dataset
+```{r}
+#Now cleaning df_people
+
+null_value_data <- sapply(df_people, function(x) sum(is.na(x)))
+null_value_data <- round(null_value_data/nrow(df_people)*100,2)
+null_value_data
+
+```
+
+Although PEDPEDAL_ACTION, PEDPEDAL_VISIBILITY, PEDPEDAL_LOCATION have more than 90% null values, we are not deleting the values as those columns are applicable only to Pedestrians and bicyclists who are nearly 2%
+```{r}
+#Although PEDPEDAL_ACTION, PEDPEDAL_VISIBILITY, PEDPEDAL_LOCATION have more than 90% null values, we are not deleting the values as those columns are applicable only to Pedestrians and bicyclists who are nearly 2%
+
+null_value_data <- sapply(df_people%>% filter(PERSON_TYPE=='PEDESTRIAN' | PERSON_TYPE=='BICYCLE'), function(x) sum(is.na(x)))
+
+null_value_data[names(null_value_data)== "PEDPEDAL_ACTION"|names(null_value_data)== "PEDPEDAL_VISIBILITY" | names(null_value_data)== "PEDPEDAL_LOCATION" ]
+```
+
+Removed other columns with more than 80% null values.
+```{r}
+#Removing other columns with more than 80%
+df_people <- df_people[,!(names(df_people) %in%  c("HOSPITAL","EMS_AGENCY","EMS_RUN_NO","BAC_RESULT.VALUE","CELL_PHONE_USE"))]
+```
+
+Modified date columns to Datetime format in all three datasets.
+```{r}
+#Modifying date columns to Datetime format
+
+df_crashes$CRASH_DATE <- mdy_hms(df_crashes$CRASH_DATE)
+df_vehicles$CRASH_DATE <- mdy_hms(df_vehicles$CRASH_DATE)
+
+```
+# Business Questions
+
+# Spread of accidents over the time period
+
+# Monthwise distribution of crashes
+## Grouped the dataset on month and aggregated crash counts. Created scatter plot with timeline on X-axis and crashes on Y-axis.
+```{r}
+
+#Business Questions
+
+# Months vs number of crashes
+
+df_crashes %>% 
+  mutate(
+    month_name = month.abb[CRASH_MONTH]
+  ) %>% 
+  group_by(month_name) %>% 
+  summarise(total_record = n()) %>% 
+  ggplot(aes(x =month_name, y=total_record)) +
+  geom_line(color="red",size=5)+
+  geom_point()+
+  ggtitle("Total Accidents by Month")+
+  labs(x="Month", y="Total Accidents")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(limits = month.abb[1:12])+ 
+  annotate(geom="rect", xmin="Feb", xmax="Apr", ymin=0, ymax=60000, fill="yellow", alpha=.2) +
+  annotate(geom="text", x="Feb", y=60000, label="Spring", hjust=0) + 
+  annotate(geom="rect", xmin="Aug", xmax="Oct", ymin=0, ymax=60000, fill="green", alpha=.17) +
+  annotate(geom="text", x="Sep", y=60000, label="Fall", hjust=0) + ylim(0,60000)
+```
+Accidents are more probable to happen during the second half of the year especially during the fall and starts to dip during the winter.
+
+
+
+# Time of Day vs number of crashes
+## Classified hours into different ranges and grouped the data to aggregate crashes. Shown bar chart in ordered groups with timeline on X-axis and crashes on Y-axis.
+
+```{r}
+
+#Analysis of Crashes Over time
+
+#Time of Day vs number of crashes
+
+df_crashes %>% 
+  mutate(
+    TimeOfDay=
+      case_when((CRASH_HOUR>6 & CRASH_HOUR<=9) ~ '6 to 9', 
+                (CRASH_HOUR>9 & CRASH_HOUR<=12) ~ '9 to 12',
+                (CRASH_HOUR>12 & CRASH_HOUR<=15) ~ '12 to 15',
+                (CRASH_HOUR>15 & CRASH_HOUR<=18) ~ '15 to 18',
+                (CRASH_HOUR>18 & CRASH_HOUR<=21) ~ '18 to 21',
+                (CRASH_HOUR>21 & CRASH_HOUR<=24) ~ '21 to 24',
+                (CRASH_HOUR<=3) ~ '0 to 3',
+                (CRASH_HOUR>3 & CRASH_HOUR<=6) ~ '3 to 6',
+                )) %>% 
+  group_by(TimeOfDay) %>% 
+  summarise(total_record = n()) %>% 
+  ggplot( aes(x =reorder(`TimeOfDay`, -total_record), y=total_record)) +
+  geom_bar(stat="identity",  fill="Black")+
+  ggtitle("Total Accidents by Time")+
+  labs(x="Time of Day", y="Total Accidents")+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Most number of accidents are reported during 12 PM to 6 PM. This is logical as majority of student,employees and others commute during this time. Its advisable to deploy more highway patrol officers to oversee the traffic during this time period.
+
+
+# Analysis on the effect of presence of Traffic Regulators
+## Grouped the data by the presence of Traffic Regulators to check the percentage of accidents under each scenario. Then filtered records where traffic regulators were present and checkied the working condition of the regulators where the accidents occurred.
+
+```{r}
+
+#Analysis on the effect of presence of Traffic Regulators
+
+
+#Grouping the data by the presence of Traffic Regulators and checking the percentage of accidents under each scenario
+traffic_regulator_pie <-
+  df_crashes %>% 
+  filter(is.na(TRAFFIC_CONTROL_DEVICE)==FALSE) %>%  
+  filter((TRAFFIC_CONTROL_DEVICE)!="UNKNOWN") %>% 
+    mutate(
+      Trafficpresence=if_else ((TRAFFIC_CONTROL_DEVICE)=="NO CONTROLS" , "No  Regulator" , "Traffic Regulated")
+      ) %>%  
+  group_by(Trafficpresence) %>%  
+  summarise(total_records=n()) %>%  
+  mutate(percent = total_records/sum(total_records)) %>% 
+  arrange(desc(percent))  %>% 
+  ggplot( aes(x ="", y=percent,fill=Trafficpresence)) +
+  geom_bar(stat="identity")+
+  ggtitle("Presence of Traffic Reguators in the place of Accident")+
+  labs( y="Accident Frequency")+
+  theme_void()  +
+  coord_polar("y", start=0)+
+  geom_text(aes(y = percent, label = paste(round(percent*100,0),"%")), color = "white", size=4,position = position_stack(vjust = 0.5)) 
+ 
+  
+# Filter records where traffic regulators were present and checking the working condition of the regulators where the accidents occurred
+regulator_working_condition <-
+  df_crashes %>%
+  filter(is.na(TRAFFIC_CONTROL_DEVICE) == FALSE) %>%
+  filter((TRAFFIC_CONTROL_DEVICE) != "UNKNOWN") %>%
+  filter((TRAFFIC_CONTROL_DEVICE) != "NO CONTROLS") %>%
+  mutate(
+    Condition = if_else ((DEVICE_CONDITION) == "FUNCTIONING PROPERLY" ,
+                         "Functioning properly" ,
+                         "Not functioning properly"
+    )
+  ) %>%
+  group_by(TRAFFIC_CONTROL_DEVICE, Condition) %>%
+  summarise(total_records = n()) %>%
+  arrange(desc(total_records))   %>%
+  head(10) %>%
+  ggplot(aes(
+    x = reorder(TRAFFIC_CONTROL_DEVICE, total_records),
+    y = total_records,
+    fill = Condition
+  )) +
+  geom_bar(stat = "identity") +
+  ggtitle("Working condition of Traffic Reguators in the place of Accident") +
+  labs(x = "Traffic Regulator", y = "Accidents") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  coord_flip()
+
+grid.arrange(traffic_regulator_pie, regulator_working_condition, ncol=1)
+
+```
+About two-thirds of the total accidents happened in places without Traffic Regulators.
+In spite of fine working, accidents have been reported from places with traffic regulators (especially where traffic signals are present).
+
+# Analysis of Environmental facotors on crashes
+## Created a new column to group similar weather conditions together and then grouped by Weather and Time to find the common weather conditions during different times of day. Since the weather in Chicago is Clear for most of the days, we filtered the records where weather was not clear and plotted again.
+
+```{r p11,fig.height=10,fig.width=10 }
+# Analysis of Weather conditions on Accidents
+
+
+p11 <-
+  df_crashes %>%
+  mutate(
+    TimeOfDay =
+      case_when((CRASH_HOUR > 6 & CRASH_HOUR <= 9) ~ '6 to 9',
+                (CRASH_HOUR > 9 & CRASH_HOUR <= 12) ~ '9 to 12',
+                (CRASH_HOUR > 12 & CRASH_HOUR <= 15) ~ '12 to 15',
+                (CRASH_HOUR > 15 & CRASH_HOUR <= 18) ~ '15 to 18',
+                (CRASH_HOUR > 18 & CRASH_HOUR <= 21) ~ '18 to 21',
+                (CRASH_HOUR > 21 & CRASH_HOUR <= 24) ~ '21 to 24',
+                (CRASH_HOUR <= 3) ~ '0 to 3',
+                (CRASH_HOUR > 3 & CRASH_HOUR <= 6) ~ '3 to 6',
+      )
+  ) %>%
+  filter(is.na(WEATHER_CONDITION) == FALSE) %>%  filter((WEATHER_CONDITION) !=
+                                                          "UNKNOWN")  %>%   filter((WEATHER_CONDITION) != "OTHER") %>%  filter(is.na(INJURIES_TOTAL) ==
+                                                                                                                                 FALSE) %>%
+  mutate(
+    Weather = case_when(
+      WEATHER_CONDITION %in% c("FREEZING RAIN/DRIZZLE", "RAIN") ~ "Rain"  ,
+      WEATHER_CONDITION %in% c("CLOUDY/OVERCAST", "FOG/SMOKE/HAZE") ~ "Cloudy/Hazy",
+      WEATHER_CONDITION %in% c("SLEET/HAIL", "BLOWING SNOW" , "SNOW") ~ "Snow" ,
+      TRUE ~ as.character(str_to_title(WEATHER_CONDITION))
+    )
+  ) %>%
+  group_by(Weather, TimeOfDay) %>%
+  summarise(total = n()) %>%
+  ggplot(aes(
+    fill = Weather,
+    y = total,
+    x = reorder(`TimeOfDay`,-total)
+  )) +
+  geom_bar(stat = "identity",  position = "stack") +
+  labs(x = "Time Period", y = "Total Accidents") +
+  ggtitle("Common weather conditions during accidents at different time periods") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p12 <-
+  
+  df_crashes %>%
+  filter(WEATHER_CONDITION != 'CLEAR') %>%
+  mutate(
+    TimeOfDay =
+      case_when((CRASH_HOUR > 6 & CRASH_HOUR <= 9) ~ '6 to 9',
+                (CRASH_HOUR > 9 & CRASH_HOUR <= 12) ~ '9 to 12',
+                (CRASH_HOUR > 12 & CRASH_HOUR <= 15) ~ '12 to 15',
+                (CRASH_HOUR > 15 & CRASH_HOUR <= 18) ~ '15 to 18',
+                (CRASH_HOUR > 18 & CRASH_HOUR <= 21) ~ '18 to 21',
+                (CRASH_HOUR > 21 & CRASH_HOUR <= 24) ~ '21 to 24',
+                (CRASH_HOUR <= 3) ~ '0 to 3',
+                (CRASH_HOUR > 3 & CRASH_HOUR <= 6) ~ '3 to 6',
+      )
+  ) %>%
+  filter(is.na(WEATHER_CONDITION) == FALSE) %>%  filter((WEATHER_CONDITION) !=
+                                                          "UNKNOWN")  %>%   filter((WEATHER_CONDITION) != "OTHER") %>%  filter(is.na(INJURIES_TOTAL) ==
+                                                                                                                                 FALSE) %>%
+  mutate(
+    Weather = case_when(
+      WEATHER_CONDITION %in% c("FREEZING RAIN/DRIZZLE", "RAIN") ~ "Rain"  ,
+      WEATHER_CONDITION %in% c("CLOUDY/OVERCAST", "FOG/SMOKE/HAZE") ~ "Cloudy/Hazy",
+      WEATHER_CONDITION %in% c("SLEET/HAIL", "BLOWING SNOW" , "SNOW") ~ "Snow" ,
+      TRUE ~ as.character(str_to_title(WEATHER_CONDITION))
+    )
+  ) %>%
+  group_by(Weather, TimeOfDay) %>%
+  summarise(total = n()) %>%
+  ggplot(aes(
+    fill = Weather,
+    y = total,
+    x = reorder(`TimeOfDay`,-total)
+  )) +
+  geom_bar(stat = "identity",  position = "stack") +
+  labs(x = "Time Period", y = "Total Accidents") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme_minimal()
+
+grid.arrange(p11, p12, ncol = 1) 
+```
+Most of the accidents reported have occurred on a clear day. This is expected as majority of the days in a year in Chicago are clear. On excluding Clear days, we see that accidents are more likely to happen on Rainy or snowy days particularly in late hours of the day.
+
+
+
+## Filtered the accidents which caused injuries and aggregated them based on weather conditions to find which weather condition leads to severe accidents.
+
+```{r}
+# Probability of injury during accident in different Weather conditions
+
+df_crashes %>%
+  filter(is.na(WEATHER_CONDITION) == FALSE) %>%  filter((WEATHER_CONDITION) !=
+                                                          "UNKNOWN")  %>%   filter((WEATHER_CONDITION) != "OTHER") %>%  filter(is.na(INJURIES_TOTAL) ==
+                                                                                                                                 FALSE) %>%
+  mutate(
+    Weather = case_when(
+      WEATHER_CONDITION %in% c("FREEZING RAIN/DRIZZLE", "RAIN") ~ "Rain"  ,
+      WEATHER_CONDITION %in% c("CLOUDY/OVERCAST", "FOG/SMOKE/HAZE") ~ "Cloudy/Hazy",
+      WEATHER_CONDITION %in% c("SLEET/HAIL", "BLOWING SNOW" , "SNOW") ~ "Snow" ,
+      TRUE ~ as.character(str_to_title(WEATHER_CONDITION))
+    )
+  ) %>%   group_by(Weather) %>%
+  summarise(total_records = n(), A = sum(if_else ((INJURIES_TOTAL) > 0 , 1 , 0))) %>%  mutate(percent = round((total_records /
+                                                                                                                 sum(total_records)) * 100, 2), f = round((A / total_records) * 100, 0)) %>%
+  arrange(desc(f)) %>%
+  ggplot(aes(x = reorder(Weather,-f), y = f)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Probability of injury during accident by Weather") +
+  labs(x = "Weather", y = "Proportion of Accidents with injuries reported") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(expand = c(0, 0.1))
+
+```
+
+
+Although most accidents occurred on Clear days they are minor ones with less or no injury. Accidents happening on Rainy, Cloudy or Windy are more likely to be severe in nature.
+
+# Analysis of the different primary causes on accidents.
+## Grouped similar causes together and plotted a pie chart to show the common causes. Then filtered the injurious accidents and plotted a horizontal bar chart to show the most common causes which lead to severe accidents.
+
+
+```{r fig.height=10, fig.width=10}
+
+# Analysis on the different primary causes on accidents.
+
+Reasondata <-
+  df_crashes %>%
+  filter(is.na(PRIM_CONTRIBUTORY_CAUSE) == FALSE) %>%  filter((PRIM_CONTRIBUTORY_CAUSE) !=
+                                                                "UNKNOWN")  %>%   filter((PRIM_CONTRIBUTORY_CAUSE) != "OTHER") %>%  filter(is.na(INJURIES_TOTAL) ==
+                                                                                                                                             FALSE) %>%
+  mutate(
+    Reasonforcrash = case_when(
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DISTRACTION|TEXTING") ~ "Distracted while Driving"  ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "ANIMAL|BUS STOP|ROAD|VISION|WEATHER") ~ "External Disturbance"  ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "SPEED") ~ "Speeding over the limit" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DISREGARDING|RED") ~ "Not following Traffice Signals",
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "NOT APPLICABLE|UNABLE TO DETERMINE") ~ "NA" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DRINKING|ALCOHOL|PHYSICAL CONDITION") ~ "DUI" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "VEHICLE CONDITION") ~ "Bad vechicle maintence",
+      TRUE ~ "Reckless/ Novice Driving"
+    )
+  ) %>%  filter((Reasonforcrash) != "NA") %>%
+  group_by(Reasonforcrash) %>%
+  summarise(total_records = n(), A = sum(if_else ((INJURIES_TOTAL) > 0 , 1 , 0))) %>%  
+  mutate(percent = round((total_records / sum(total_records)) * 100, 2), f = A / total_records) %>%
+  arrange(desc(f))
+
+
+p2 <- Reasondata %>%
+  ggplot(aes(x = "", y = percent, fill = Reasonforcrash)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Reason for Crash") +
+  labs(y = "% of Accidentes Reported", fill = "Reason for Crash") +
+  theme_void()  +
+  coord_polar("y", start = 0)+
+  scale_x_discrete(expand = c(0, 0.1)) +
+  geom_text(
+    aes(y = percent, label = paste0(round(percent, 0), "%")),
+    color = "white",
+    size = 3,
+    position = position_stack(vjust = 0.5)
+  )
+
+p3 <- Reasondata %>%
+  ggplot(aes(x = reorder(Reasonforcrash, f), y = f)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Probability of injury during accident by the Reason") +
+  labs(x = "Reason for Accident", y = "Proportion of Accidents with injuries to the victims") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(expand = c(0, 0.1)) +
+  coord_flip()
+
+
+
+grid.arrange(p2, p3, ncol = 1)
+```
+In about 3/4th of the accidents, reckless/Novice driving skills have been reported as the primary reason. Speeding and not following traffic rules are other major primary reasons.
+Driving under influence and not following traffic traffic signals are reportedly more dangerous.
+
+
+
+# Analysis of the damage caused with different cause of accidents
+## Filtered the rows which are not applicable and grouped similar causes together and cut the data by the damage interms of monetary values. 
+
+```{r}
+
+
+# Analysis of the damage caused by accidents with different cause of accidents
+
+df_crashes %>%
+  filter(is.na(PRIM_CONTRIBUTORY_CAUSE) == FALSE) %>%  filter((PRIM_CONTRIBUTORY_CAUSE) !=
+                                                                "UNKNOWN")  %>%   filter((PRIM_CONTRIBUTORY_CAUSE) != "OTHER") %>%             filter(is.na(INJURIES_TOTAL) ==
+                                                                                                                                                        FALSE) %>%
+  mutate(
+    Reasonforcrash = case_when(
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DISTRACTION|TEXTING") ~ "Distracted while Driving"  ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "ANIMAL|BUS STOP|ROAD|VISION|WEATHER") ~ "External Disturbance"  ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "SPEED") ~ "Speeding over the limit" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DISREGARDING|RED") ~ "Not folowing Traffice Signals",
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "NOT APPLICABLE|UNABLE TO DETERMINE") ~ "NA" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "DRINKING|ALCOHOL|PHYSICAL CONDITION") ~ "DUI" ,
+      str_detect(toupper(PRIM_CONTRIBUTORY_CAUSE), "VEHICLE CONDITION") ~ "Bad vechicle maintence",
+      TRUE ~ "Reckless/ Novice Driving"
+    )
+  ) %>%  filter((Reasonforcrash) != "NA") %>%    
+  group_by(Reasonforcrash, DAMAGE) %>%
+  summarise(total_records = n())  %>% 
+  mutate(percent = round((total_records / sum(total_records)) * 100, 2)) %>%
+  arrange(desc(percent)) %>%
+  ggplot(aes(x = reorder(Reasonforcrash, percent), y = percent, fill = DAMAGE)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Monetary Damage vs the Reason for Accidents") +
+  labs(x = "Reason for Accident", y = "Damage in terms of money" , fill = "Monetary value") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  coord_flip()
+```
+
+Irrespective of the reason for accident, majority of the accidents reported have caused damage worth more than 1500 dollars. Damage cost due to DUI and traffic rule violations are more likely to be high
+
+
+
+# Analysis on the usage of safety equipments
+## Classified injuries and safety_equipment into broader groups and grouped similar data together to find the effect of safety equipments usage on severity.
+
+
+```{r}
+# Analysis on the usage of safety Equipment
+
+kable(
+df_people %>%
+    mutate(
+      Injury_Type =
+        case_when(
+          INJURY_CLASSIFICATION == 'FATAL' |
+            INJURY_CLASSIFICATION == 'INCAPACITATING INJURY' ~ 'Severe',
+          TRUE ~ 'Non Severe'
+        ),Safety_Equipment_Used =
+             case_when(
+               (
+                 SAFETY_EQUIPMENT == 'HELMET NOT USED' |
+                   SAFETY_EQUIPMENT == 'NOT DOT COMPLIANT MOTORCYCLE HELMET' |
+                   INJURY_CLASSIFICATION == 'CHILD RESTRAINT USED IMPROPERLY' |
+                   SAFETY_EQUIPMENT == 'CHILD RESTRAINT NOT USED' |
+                   SAFETY_EQUIPMENT == 'NONE PRESENT' |
+                   SAFETY_EQUIPMENT == 'SAFETY BELT NOT USED' |
+                   SAFETY_EQUIPMENT == 'SHOULD/LAP BELT USED IMPROPERLY'
+               ) ~ 'Not Used',
+               (
+                 SAFETY_EQUIPMENT == 'HELMET USED' |
+                   SAFETY_EQUIPMENT == 'DOT COMPLIANT MOTORCYCLE HELMET' |
+                   INJURY_CLASSIFICATION == 'CHILD RESTRAINT USED' |
+                   SAFETY_EQUIPMENT == 'SAFETY BELT USED' |
+                   SAFETY_EQUIPMENT == 'BICYCLE HELMET (PEDACYCLIST INVOLVED ONLY)' |
+                   SAFETY_EQUIPMENT == 'CHILD RESTRAINT - FORWARD FACING' |
+                   SAFETY_EQUIPMENT == 'CHILD RESTRAINT - REAR FACING' |
+                   SAFETY_EQUIPMENT == 'CHILD RESTRAINT - TYPE UNKNOWN'
+               ) ~ 'Used'
+             )) %>%
+    group_by(Safety_Equipment_Used, Injury_Type) %>%
+    summarise(count = n()) %>%
+    mutate(total = sum(count), Percentage = round(count / total * 100, 2)) %>%
+    select(Safety_Equipment_Used, Injury_Type, Percentage) %>%  
+    filter(Safety_Equipment_Used != 'NA')
+)
+```
+
+
+# Analysis of vehicle defects on crashes 
+## Grouped records based on Vehicle_Defects plotted a bar chart to find the most common defects in vehicles causing accidets.
+
+```{r}
+
+#Analysis of vehicle defects on crashes 
+
+df_vehicles %>%
+filter(!is.na(VEHICLE_DEFECT)) %>%
+filter(!VEHICLE_DEFECT %in% c('', 'UNKNOWN', 'OTHER', 'NONE') ) %>%
+group_by(VEHICLE_DEFECT) %>%
+summarise(p = n()) %>%
+arrange(desc(p)) %>%
+mutate(name=factor(VEHICLE_DEFECT, levels=VEHICLE_DEFECT)) %>%
+ggplot(aes(x=name, y=p)) +
+geom_segment( aes(x=name, xend=name, y=0, yend=p)) +
+geom_point( size=5, color="pink", fill=alpha("red", 0.3), alpha=0.7, shape=21, stroke=2) +
+coord_flip() +
+theme_bw()
+
+```
+Among records where defects are found in vehicles, defects in brakes is the most common.
+Defects in Tires and steering are other causes.
+
+
+# Analysis of accidents involving pedestrians/bicyclists
+## Filtered out pedestrians and Bicyclists data to find the percentage of accidents where pedestrians are involved.
+```{r}
+
+#Analysis of accidents involving pedestrians/bicyclists
+
+accidents_reported <- nrow(df_crashes)
+
+kable(
+   df_crashes %>%
+   left_join(df_people,by='CRASH_RECORD_ID') %>%
+   filter(PERSON_TYPE %in% c('PEDESTRIAN','BICYCLE')) %>% 
+   group_by(CRASH_RECORD_ID) %>% summarise(Count = n()) %>% 
+   group_by(CRASH_RECORD_ID) %>% summarise(Count = n()) %>%   
+   group_by(Count) %>% summarise("Percent of accidents involving pedestrians"=round((sum(Count)/accidents_reported)*100,2)) %>% select("Percent of accidents involving pedestrians")
+)
+```
+Pedestrians are involved in almost 4% of the total crashes.
+
+
+# Common location where pedestrians realted accidents happened
+## Categorised injuries as Severe and Non Severe and then grouped the data based on location where accidents are reported. Plotted a stacked bar chart to find the common locations with pedestrian accidents and find where severe crashes occurred. After that we took the common location and analysed the reason for accidents at that particular location
+```{r fig.height=10, fig.width=10}
+
+# Common location where pedestrians related accidents happened
+
+pedestrian <-
+df_people %>% 
+  filter(PERSON_TYPE=='PEDESTRIAN' | PERSON_TYPE =='BICYCLE') %>% 
+  mutate(INJURY_TYPE=
+           case_when(
+      INJURY_CLASSIFICATION == 'FATAL' | INJURY_CLASSIFICATION == 'INCAPACITATING INJURY'~ 'SEVERE',
+      TRUE ~ 'NON SEVERE'
+    )) %>% 
+  group_by(PEDPEDAL_LOCATION,INJURY_TYPE) %>% 
+  summarise(count=n()) %>% 
+  mutate(total = sum(count),percent = round(count/total*100,2)) %>% 
+  filter(PEDPEDAL_LOCATION != 'NA' & PEDPEDAL_LOCATION != 'UNKNOWN/NA') %>% 
+  ggplot(aes(fill=INJURY_TYPE, y=count, x=reorder(PEDPEDAL_LOCATION,count)))+
+  geom_bar(stat="identity",  position="stack")+
+  labs(x="Time Period", y="Total Accidents")+
+  ggtitle("Common locations where pedestrian accidents were reported") +
+  labs(x = "Pedestrian Location", y = "Accidents") +
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme_minimal()+coord_flip()
+
+pedestrian_crosswalk <-
+df_people %>%
+  filter(PERSON_TYPE=='PEDESTRIAN' | PERSON_TYPE =='BICYCLE') %>%
+  mutate(INJURY_TYPE=
+           case_when(
+      INJURY_CLASSIFICATION == 'FATAL' | INJURY_CLASSIFICATION == 'INCAPACITATING INJURY'~ 'SEVERE',
+      TRUE ~ 'NON SEVERE'
+    )) %>% filter(PEDPEDAL_LOCATION == 'IN CROSSWALK') %>%
+  group_by(PEDPEDAL_ACTION) %>% summarise(Count = n()) %>%
+  filter(PEDPEDAL_ACTION != 'UNKNOWN/NA' & PEDPEDAL_ACTION != 'OTHER ACTION') %>%
+  arrange(desc(Count)) %>% 
+  head(10) %>% 
+  ggplot(aes(x = reorder(PEDPEDAL_ACTION,Count), y = Count)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Reasons for pedestrian accidents in Crosswalk") +
+  labs(x = "Pedestrian Action", y = "Accidents") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(expand = c(0, 0.1))+
+  coord_flip()
+
+
+grid.arrange(pedestrian,pedestrian_crosswalk)
+```
+Most pedestrian related accidents happened in Roadway and Crosswalk. Its advisable for pedestrians to stay away from Roadways and walk on platforms.
+In Cross walks, most accidents happened when people were crossing the roads with signal. The probable reason could be that the vehicles did not follow the traffic signal or failed to yield way to pedestrians. Other than that more accidents transpired at intersections without traffic signals and crossing against signals.
+
+
+
+
+
+
+#Recommendations
+
+## Drive carefully especially during the fall season. More highway patrol officers should be on duty during the later half of the day. 
+
+## Avoid driving under the influence and respect the traffic rules. Do regular maintence check of your vehicles, espesically check if the brakes are functioning properly.
+
+## Pedestrians should be careful while crossing the road even if they are crossing in crosswalks
+
+
+
+#References
+1) https://www.r-graph-gallery.com/
+2) https://sebastiansauer.github.io/figure_sizing_knitr/
